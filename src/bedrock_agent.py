@@ -8,7 +8,7 @@ import boto3
 import websockets
 
 WS_URL = os.environ.get("MCP_SERVER_URL", "ws://localhost:8765")
-MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-sonnet-20240229-v1:0")
+MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
 ERROR_THRESHOLD = 0.3
 

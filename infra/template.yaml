@@ -9,7 +9,7 @@ Parameters:
     Description: At least 2 subnets in different AZs
   BedrockModelId:
     Type: String
-    Default: anthropic.claude-3-sonnet-20240229-v1:0
+    Default: anthropic.claude-sonnet-4-5-20250929-v1:0
 
 Resources:
   # --- MSK Serverless Cluster ---
@@ -77,7 +77,7 @@ Resources:
       Timeout: 30
       Environment:
         Variables:
-          MSK_BOOTSTRAP: !Sub '{{resolve:ssm:/mcp-demo/msk-bootstrap}}'
+          MSK_BOOTSTRAP: 'PLACEHOLDER_UPDATE_AFTER_DEPLOY'
 
   # --- Bedrock Agent ---
   BedrockAgentRole:

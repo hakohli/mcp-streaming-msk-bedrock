@@ -10,10 +10,29 @@ import websockets
 WS_URL = os.environ.get("MCP_SERVER_URL", "ws://localhost:8765")
 MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
 REGION = os.environ.get("AWS_REGION", "us-east-1")
+SNS_TOPIC_ARN = os.environ.get("SNS_TOPIC_ARN", "arn:aws:sns:us-east-1:395102750341:mcp-streaming-rca-alerts")
 ERROR_THRESHOLD = 0.3
 
 bedrock = boto3.client("bedrock-runtime", region_name=REGION)
+sns = boto3.client("sns", region_name=REGION)
 error_window = deque(maxlen=20)
+
+
+def send_rca_email(analysis: str, errors: list[dict]):
+    """Send RCA results via SNS email when anomaly is detected."""
+    subject = f"[MCP Alert] Anomaly Detected - {errors[0].get('service', 'unknown')} - RCA Available"
+    sns.publish(
+        TopicArn=SNS_TOPIC_ARN,
+        Subject=subject[:100],
+        Message=f"ANOMALY DETECTED - Streaming MCP Pipeline\n\n"
+                f"Error Rate: >{ERROR_THRESHOLD*100:.0f}%\n"
+                f"Triggering Service: {errors[0].get('service')}\n"
+                f"Error: {errors[0].get('message')}\n\n"
+                f"{'='*60}\n"
+                f"ROOT CAUSE ANALYSIS (Bedrock Claude)\n"
+                f"{'='*60}\n\n"
+                f"{analysis}\n",
+    )
 
 
 def analyze_with_bedrock(errors: list[dict]) -> str:
@@ -80,6 +99,8 @@ async def run_agent():
                     try:
                         analysis = analyze_with_bedrock(recent_errors)
                         print(f"\n\U0001f916 Bedrock Analysis:\n{analysis}\n")
+                        send_rca_email(analysis, recent_errors)
+                        print("   \U0001f4e7 RCA sent via SNS email")
                     except Exception as e:
                         print(f"   Bedrock error: {e}")
 

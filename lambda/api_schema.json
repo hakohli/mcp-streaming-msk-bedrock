@@ -1,0 +1,59 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MCP Streaming Agent Actions",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/get_anomalies": {
+      "get": {
+        "summary": "Get current anomaly state from the MSK log stream",
+        "description": "Returns error rate, error count, and recent errors from the rolling event window",
+        "operationId": "getAnomalies",
+        "responses": {
+          "200": {
+            "description": "Anomaly state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error_rate": { "type": "number" },
+                    "error_count": { "type": "integer" },
+                    "window_size": { "type": "integer" },
+                    "is_anomaly": { "type": "boolean" },
+                    "recent_errors": { "type": "array" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/get_context": {
+      "get": {
+        "summary": "Get streaming server context and configuration",
+        "description": "Returns current MSK topic, bootstrap servers, and server status",
+        "operationId": "getContext",
+        "responses": {
+          "200": {
+            "description": "Server context",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "topic": { "type": "string" },
+                    "bootstrap": { "type": "string" },
+                    "status": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

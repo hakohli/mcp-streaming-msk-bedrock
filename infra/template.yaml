@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: MSK Serverless cluster + Bedrock Agent for streaming MCP demo
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: At least 2 subnets in different AZs
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-sonnet-20240229-v1:0
+
+Resources:
+  # --- MSK Serverless Cluster ---
+  MSKSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: MSK streaming MCP demo
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 9098
+          ToPort: 9098
+          CidrIp: 10.0.0.0/8
+
+  MSKCluster:
+    Type: AWS::MSK::ServerlessCluster
+    Properties:
+      ClusterName: mcp-streaming-demo
+      ClientAuthentication:
+        Sasl:
+          Iam:
+            Enabled: true
+      VpcConfigs:
+        - SubnetIds: !Ref SubnetIds
+          SecurityGroups:
+            - !Ref MSKSecurityGroup
+
+  # --- Lambda for Bedrock Agent Action Group ---
+  AgentLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: MSKAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kafka-cluster:Connect
+                  - kafka-cluster:DescribeTopic
+                  - kafka-cluster:ReadData
+                Resource: '*'
+
+  AgentLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: mcp-streaming-agent-action
+      Runtime: python3.12
+      Handler: handler.lambda_handler
+      Code:
+        ZipFile: |
+          # Placeholder - deploy from lambda/ directory
+          def lambda_handler(event, context):
+              return {"statusCode": 200}
+      Role: !GetAtt AgentLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          MSK_BOOTSTRAP: !Sub '{{resolve:ssm:/mcp-demo/msk-bootstrap}}'
+
+  # --- Bedrock Agent ---
+  BedrockAgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: BedrockAgentPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt AgentLambda.Arn
+
+  BedrockAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: mcp-streaming-agent
+      AgentResourceRoleArn: !GetAtt BedrockAgentRole.Arn
+      FoundationModel: !Ref BedrockModelId
+      Instruction: |
+        You are an AI operations agent monitoring a live application log stream via MCP (Model Context Protocol).
+        You receive real-time events from an MSK topic. When you detect anomalies (error spikes above 30%),
+        analyze the error patterns and suggest remediation steps. Use get_anomalies to query current anomaly state
+        and get_context to understand the streaming server state.
+
+  # --- MSK Producer/Consumer IAM Policy (for EC2/local dev) ---
+  MSKClientPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: mcp-demo-msk-client
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - kafka-cluster:Connect
+              - kafka-cluster:DescribeTopic
+              - kafka-cluster:CreateTopic
+              - kafka-cluster:WriteData
+              - kafka-cluster:ReadData
+              - kafka-cluster:DescribeGroup
+              - kafka-cluster:AlterGroup
+            Resource: '*'
+
+Outputs:
+  ClusterArn:
+    Value: !Ref MSKCluster
+  AgentId:
+    Value: !Ref BedrockAgent
+  LambdaArn:
+    Value: !GetAtt AgentLambda.Arn
